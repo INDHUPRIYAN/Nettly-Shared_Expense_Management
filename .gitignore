@@ -1,0 +1,38 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+dist-ssr
+dev-dist
+*.tsbuildinfo
+
+# Environment — never commit secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# Testing
+coverage
+test-results
+playwright-report
+blob-report
+playwright/.cache
+
+# Supabase local state
+supabase/.branches
+supabase/.temp
+supabase/.env
+
+# Vercel
+.vercel
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea
+*.local
