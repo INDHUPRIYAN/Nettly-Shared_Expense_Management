@@ -121,19 +121,42 @@ test('Delhi Trip 2026: two friends split, edit, delete and settle', async ({ bro
   await confirm.getByRole('button', { name: 'Delete' }).click()
   await expect(myBalance(nandha)).toHaveText('-₹750')
 
-  // --- Nandha settles up ---------------------------------------------------------
+  // --- Settling up: only the receiver can mark money as paid ---------------------
+  // Nandha (payer) cannot edit/delete Indhu's expense and cannot mark a payment received.
   await expect(nandha.getByRole('heading', { name: 'You owe' })).toBeVisible()
   await openTab(nandha, 'Settle up')
-  await nandha.getByRole('button', { name: 'Mark as paid' }).click()
+  await expect(nandha.getByRole('button', { name: 'Mark received' })).toHaveCount(0)
+  await nandha.getByRole('button', { name: "I've paid" }).click()
   const pay = nandha.getByRole('dialog')
-  await expect(pay.getByText('You are marking ₹750 paid to Indhu.')).toBeVisible()
-  await pay.getByRole('button', { name: 'Confirm' }).click()
-  await expect(nandha.getByText("You're all settled!")).toBeVisible()
-  await expect(nandha.getByRole('list', { name: 'Settlement history' })).toContainText('You paid Indhu ₹750')
+  await expect(pay.getByText(/Indhu will be asked to confirm they received ₹750/)).toBeVisible()
+  await pay.getByRole('button', { name: 'Send request' }).click()
+  await expect(nandha.getByText('Waiting for Indhu').first()).toBeVisible()
 
-  // Indhu sees the payment live and is settled too.
+  // Nothing counts until Indhu confirms.
+  await openTab(nandha, 'Overview')
+  await expect(myBalance(nandha)).toHaveText('-₹750')
+
+  // Indhu sees the request live and confirms she received the money.
+  await indhu.getByRole('button', { name: 'Confirm ₹750' }).click()
   await expect(myBalance(indhu)).toHaveText('₹0')
   await expect(indhu.getByText("You're all settled up")).toBeVisible()
+  await expect(myBalance(nandha)).toHaveText('₹0')
+  await openTab(nandha, 'Settle up')
+  await expect(nandha.getByText("You're all settled!")).toBeVisible()
+  await expect(nandha.getByRole('list', { name: 'Settlement history' })).toContainText('You paid Indhu ₹750')
+  // The payer can't undo a payment the receiver confirmed.
+  await expect(nandha.getByRole('button', { name: 'Undo' })).toHaveCount(0)
+
+  // --- History + PDF receipts --------------------------------------------------------
+  await openTab(indhu, 'History')
+  await expect(indhu.getByRole('list', { name: 'History' })).toContainText('Dinner')
+  await expect(indhu.getByRole('list', { name: 'History' })).toContainText('Nandha → You')
+  const receipt = indhu.waitForEvent('download')
+  await indhu.getByRole('button', { name: 'Download receipt for Dinner' }).click()
+  expect((await receipt).suggestedFilename()).toBe('delhi-trip-2026-dinner-receipt.pdf')
+  const report = indhu.waitForEvent('download')
+  await indhu.getByRole('button', { name: 'Download PDF report' }).click()
+  expect((await report).suggestedFilename()).toMatch(/^delhi-trip-2026-report-\d{4}-\d{2}-\d{2}\.pdf$/)
 
   // --- Members page shows balances & roles ---------------------------------------
   await openTab(indhu, 'Members')

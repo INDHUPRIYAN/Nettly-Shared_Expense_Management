@@ -114,7 +114,9 @@ export function ExpenseDetailsDialog({
               </Button>
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground">Only the person who added this expense or a group admin can change it.</p>
+            <p className="text-xs text-muted-foreground">
+              Only {displayName(expense.createdBy)} (who added this expense) can edit or delete it.
+            </p>
           )}
         </DialogContent>
       </Dialog>

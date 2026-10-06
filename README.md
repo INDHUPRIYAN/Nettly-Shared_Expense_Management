@@ -37,7 +37,7 @@ Roles: owner, admin, member.
 (e.g. `AB72KQ`). Copy link (Clipboard API), share on WhatsApp, join with a code, reset the link. Logged-out visitors see
 a preview and are sent back to the invite after logging in or signing up. Joining twice is harmless.
 
-**Expenses** — add, view, edit, delete (with confirmation); Edit and Delete buttons sit on every expense in the list. Title, description, amount, payer, category, date and
+**Expenses** — add, view, edit, delete (with confirmation); Edit and Delete buttons sit on every expense in the list. **Only the person who added an expense can edit or delete it** — not even the group owner. Title, description, amount, payer, category, date and
 participants. Search and filter by category, grouped by month.
 
 **Splitting** — equal, custom amounts, percentages and shares. Untick anyone who didn't take part — they owe ₹0 for
@@ -48,13 +48,17 @@ deterministic (₹100 / 3 = 33.33 + 33.33 + 33.34) — money is never created or
 owes). A personal "Your balance" hero answers *"do I owe money or do people owe me?"* in under 5 seconds, followed by
 **You owe** / **You should receive** lists.
 
-**Settlements** — suggested minimum payments, **Mark as paid** with confirmation (full or partial amount, optional
-note), settlement history with All / Pending / Paid filters, and undo (cancel) of a recorded payment. Settlements are
+**Settlements** — suggested minimum payments. **Only the person receiving money can mark it as received.** The payer
+taps **I've paid**, which sends a request that counts only after the receiver confirms (full or partial amount,
+optional note). Settlement history with All / Pending / Paid filters; only the receiver can undo a payment. Settlements are
 separate records: original expenses never change.
 
 **Members** — member list with roles and balances; owners can promote admins and remove members; anyone can leave.
 Members with financial history are never deleted: they can only be removed with a settled balance and are kept as
 *former members* so historical records stay valid.
+
+**History & PDF receipts** — a History tab with every expense and payment, a downloadable PDF receipt for each one,
+and a full group report PDF (member-wise totals, pending payments, all expenses and payments).
 
 **Realtime** — when anyone adds, edits or deletes an expense, records a payment or joins, every open screen in that
 group updates automatically.
@@ -305,8 +309,10 @@ network, so financial data is never served stale.
 - **Invites.** 192-bit random tokens in links; tokens and codes are generated in the database and can be reset.
   Removing a member rotates the invite automatically, and short-code lookups are rate limited (10 failed attempts per
   user per hour) against guessing.
-- **Payments can't be faked away.** The payer may mark a debt as paid (fast for friends), but the receiver can always
-  dispute (cancel) a payment recorded to them — even after the payer has left the group.
+- **Payments can't be faked.** Only the receiver can mark money as paid; the payer can only send an "I've paid"
+  request. Only the receiver can undo a confirmed payment — even after the payer has left the group.
+- **Expenses belong to their creator.** Only the person who added an expense can edit or delete it. Only the group
+  owner can delete the group.
 - **Concurrency.** Write triggers take a row lock on the member's membership, so removing a member can't race with a
   new expense or payment for them.
 - **Private emails.** Co-members can see each other's names, never email addresses (column-level privileges).

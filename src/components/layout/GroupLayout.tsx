@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { useUserId } from '@/hooks/useAuth'
 import { useGroupData, useGroupRealtime } from '@/hooks/useGroup'
 import { formatMoney, type Transfer } from '@/lib/settlement'
-import { GroupProvider, useGroupContext, type GroupActions } from '@/providers/GroupContext'
+import { GroupProvider, useGroupContext, type GroupActions, type SettleMode } from '@/providers/GroupContext'
 import type { Expense } from '@/types/app'
 import { AppShell } from './AppShell'
 import { GroupBottomNav, GroupTabs } from './GroupNav'
@@ -67,14 +67,14 @@ export function GroupLayout() {
 
   const [form, setForm] = useState<{ open: boolean; expenseId?: string; key: number }>({ open: false, key: 0 })
   const [detailsId, setDetailsId] = useState<string | null>(null)
-  const [settle, setSettle] = useState<{ transfer: Transfer; key: number } | null>(null)
+  const [settle, setSettle] = useState<{ transfer: Transfer; mode: SettleMode; key: number } | null>(null)
 
   const openExpenseForm = useCallback(
     (expense?: Expense) => setForm((f) => ({ open: true, expenseId: expense?.id, key: f.key + 1 })),
     [],
   )
   const openExpenseDetails = useCallback((expense: Expense) => setDetailsId(expense.id), [])
-  const openSettle = useCallback((transfer: Transfer) => setSettle({ transfer, key: Date.now() }), [])
+  const openSettle = useCallback((transfer: Transfer, mode: SettleMode) => setSettle({ transfer, mode, key: Date.now() }), [])
   const actions = useMemo<GroupActions>(
     () => ({ openExpenseForm, openExpenseDetails, openSettle }),
     [openExpenseForm, openExpenseDetails, openSettle],
@@ -133,7 +133,7 @@ export function GroupLayout() {
         />
       )}
       <ExpenseDetailsDialog expense={details} onOpenChange={(open) => !open && setDetailsId(null)} />
-      {settle && <MarkPaidDialog key={settle.key} transfer={settle.transfer} onOpenChange={(open) => !open && setSettle(null)} />}
+      {settle && <MarkPaidDialog key={settle.key} transfer={settle.transfer} mode={settle.mode} onOpenChange={(open) => !open && setSettle(null)} />}
     </GroupProvider>
   )
 }

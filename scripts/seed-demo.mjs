@@ -105,7 +105,8 @@ if (existing.some((g) => g.name === 'Delhi Trip 2026')) {
     )
   }
   must(
-    await arun.client
+    // Only the receiver (Karthik) can mark money as paid.
+    await karthik.client
       .from('settlements')
       .insert({ group_id: group.id, from_user: arun.id, to_user: karthik.id, amount: R(500), status: 'paid', note: 'UPI' }),
     'record settlement',

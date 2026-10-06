@@ -184,10 +184,16 @@ describe('deriveGroupState', () => {
 
     const asOwner = deriveGroupState(data, 'a')
     expect(asOwner.isAdmin).toBe(true)
-    expect(asOwner.canSettle('b', 'a')).toBe(true)
+    // Only the person who added an expense can edit or delete it — not even the owner.
+    expect(asOwner.canEditExpense(data.expenses[0]!)).toBe(false)
+    // Only the receiver can mark money as received; only the payer can say "I've paid".
+    expect(asOwner.canMarkReceived('b', 'a')).toBe(true)
+    expect(asNandha.canMarkReceived('b', 'a')).toBe(false)
+    expect(asNandha.canRequestPaid('b', 'a')).toBe(true)
+    expect(asOwner.canRequestPaid('b', 'a')).toBe(false)
     // Indhu received the former member's payment, so she can still dispute it…
     expect(asOwner.canCancelSettlement(data.settlements[0]!)).toBe(true)
-    // …but nobody else can change a former member's payment.
+    // …but nobody else can change it.
     expect(asNandha.canCancelSettlement(data.settlements[0]!)).toBe(false)
   })
 })

@@ -1,7 +1,7 @@
 import { ArrowDownLeft, ArrowUpRight, PartyPopper } from 'lucide-react'
 import { BalanceAmount } from '@/components/common/Money'
 import { MemberAvatar } from '@/components/common/MemberAvatar'
-import { Button } from '@/components/ui/button'
+import { TransferActions } from '@/components/settlements/TransferActions'
 import { Card } from '@/components/ui/primitives'
 import { balanceState, formatMoney, type Money, type Transfer } from '@/lib/settlement'
 import { cn } from '@/lib/utils'
@@ -59,7 +59,7 @@ export function SummaryCards({ paid, share, net, currency }: { paid: Money; shar
 }
 
 function TransferLine({ transfer, direction }: { transfer: Transfer; direction: 'owe' | 'receive' }) {
-  const { memberById, group, nameOf, canSettle, openSettle } = useGroupContext()
+  const { memberById, group, nameOf } = useGroupContext()
   const otherId = direction === 'owe' ? transfer.to : transfer.from
   const other = memberById.get(otherId)
   return (
@@ -69,11 +69,7 @@ function TransferLine({ transfer, direction }: { transfer: Transfer; direction: 
       <span className={cn('text-sm font-semibold tabular', direction === 'owe' ? 'text-negative' : 'text-positive')}>
         {formatMoney(transfer.amount, group.currency)}
       </span>
-      {canSettle(transfer.from, transfer.to) && (
-        <Button size="sm" variant={direction === 'owe' ? 'default' : 'outline'} onClick={() => openSettle(transfer)}>
-          {direction === 'owe' ? 'Pay' : 'Mark paid'}
-        </Button>
-      )}
+      <TransferActions transfer={transfer} compact />
     </li>
   )
 }

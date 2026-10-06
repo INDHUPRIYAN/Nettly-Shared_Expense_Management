@@ -30,6 +30,6 @@ export function myBalance(page: Page) {
   return page.getByTestId('my-balance')
 }
 
-export async function openTab(page: Page, name: 'Overview' | 'Expenses' | 'Settle up' | 'Members' | 'Settings') {
+export async function openTab(page: Page, name: 'Overview' | 'Expenses' | 'Settle up' | 'Members' | 'History' | 'Settings') {
   await page.getByRole('navigation', { name: 'Group sections' }).first().getByRole('link', { name }).click()
 }

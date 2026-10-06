@@ -31,6 +31,8 @@ const DB_MESSAGES: Record<string, string> = {
   MEMBER_NOT_FOUND: 'That person is not a member of this group anymore.',
   MEMBER_HAS_BALANCE: 'This member still has an unsettled balance. Settle up first.',
   MEMBER_HAS_PENDING_SETTLEMENTS: 'This member has pending payments. Resolve them first.',
+  ONLY_RECEIVER_CAN_MARK_PAID: 'Only the person who receives the money can mark it as paid.',
+  SETTLEMENT_REQUEST_EXISTS: 'A payment request is already waiting for confirmation.',
   RATE_LIMITED: 'Too many attempts. Please wait a while and try again.',
 }
 

@@ -33,6 +33,7 @@ export const router = createBrowserRouter([
               { index: true, lazy: () => import('@/pages/GroupPage').then((m) => ({ Component: m.GroupPage })) },
               { path: 'expenses', lazy: () => import('@/pages/ExpensesPage').then((m) => ({ Component: m.ExpensesPage })) },
               { path: 'settlements', lazy: () => import('@/pages/SettlementsPage').then((m) => ({ Component: m.SettlementsPage })) },
+              { path: 'history', lazy: () => import('@/pages/HistoryPage').then((m) => ({ Component: m.HistoryPage })) },
               { path: 'members', lazy: () => import('@/pages/MembersPage').then((m) => ({ Component: m.MembersPage })) },
               { path: 'settings', lazy: () => import('@/pages/GroupSettingsPage').then((m) => ({ Component: m.GroupSettingsPage })) },
             ],

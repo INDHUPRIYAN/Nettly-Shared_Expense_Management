@@ -38,7 +38,7 @@ export async function updateExpense(expenseId: string, input: ExpenseInput): Pro
 export async function deleteExpense(expenseId: string): Promise<void> {
   const { data, error } = await supabase.from('expenses').delete().eq('id', expenseId).select('id')
   throwIfError(error, "We couldn't delete the expense.")
-  if (!data || data.length === 0) throw new AppError('Only the person who added it or a group admin can delete this expense.')
+  if (!data || data.length === 0) throw new AppError('Only the person who added this expense can delete it.')
 }
 
 /* ----------------------------------------------------------------------------
@@ -51,6 +51,8 @@ export async function recordSettlement(input: {
   toUser: UserId
   amount: Money
   note: string | null
+  /** 'paid' = receiver records it; 'pending' = payer's "I've paid" request. */
+  status: 'paid' | 'pending'
 }) {
   const { data, error } = await supabase
     .from('settlements')
@@ -60,7 +62,7 @@ export async function recordSettlement(input: {
       to_user: input.toUser,
       amount: input.amount,
       note: input.note,
-      status: 'paid',
+      status: input.status,
     })
     .select()
     .single()

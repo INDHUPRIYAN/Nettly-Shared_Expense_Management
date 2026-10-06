@@ -51,7 +51,7 @@ export function useDeleteExpense(groupId: string) {
 export function useRecordSettlement(groupId: string) {
   const invalidate = useInvalidateGroup(groupId)
   return useMutation({
-    mutationFn: (input: { fromUser: UserId; toUser: UserId; amount: Money; note: string | null }) =>
+    mutationFn: (input: { fromUser: UserId; toUser: UserId; amount: Money; note: string | null; status: 'paid' | 'pending' }) =>
       recordSettlement({ groupId, ...input }),
     onSuccess: invalidate,
   })

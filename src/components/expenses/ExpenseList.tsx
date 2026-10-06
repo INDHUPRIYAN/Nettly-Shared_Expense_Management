@@ -17,7 +17,7 @@ export function ExpenseRow({ expense }: { expense: Expense }) {
   const allowed = canEditExpense(expense) && !locked
   const reason = locked
     ? 'Involves someone who left the group'
-    : 'Only the person who added it or a group admin can change this'
+    : `Only ${displayName(expense.createdBy)} (who added it) can edit or delete this`
   const amount = formatMoney(expense.amount, group.currency)
 
   return (

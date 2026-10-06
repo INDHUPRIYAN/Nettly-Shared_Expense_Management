@@ -3,9 +3,10 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/common/ConfirmDialog'
 import { MemberAvatar } from '@/components/common/MemberAvatar'
+import { TransferActions } from '@/components/settlements/TransferActions'
 import { EmptyState } from '@/components/common/States'
 import { Button } from '@/components/ui/button'
-import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/primitives'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/primitives'
 import { Segmented } from '@/components/ui/menu'
 import { useUpdateSettlementStatus } from '@/hooks/useGroupMutations'
 import { getErrorMessage } from '@/lib/errors'
@@ -32,28 +33,22 @@ function Parties({ from, to }: { from: string; to: string }) {
 }
 
 function SuggestedRow({ transfer }: { transfer: Transfer }) {
-  const { group, canSettle, openSettle } = useGroupContext()
+  const { group } = useGroupContext()
   return (
     <li className="flex flex-wrap items-center gap-3 py-3">
       <div className="min-w-0 flex-1">
         <Parties from={transfer.from} to={transfer.to} />
       </div>
       <span className="font-semibold tabular">{formatMoney(transfer.amount, group.currency)}</span>
-      {canSettle(transfer.from, transfer.to) ? (
-        <Button size="sm" onClick={() => openSettle(transfer)}>
-          Mark as paid
-        </Button>
-      ) : (
-        <Badge variant="pending">
-          <Clock /> Pending
-        </Badge>
-      )}
+      <TransferActions transfer={transfer} />
     </li>
   )
 }
 
 function HistoryRow({ settlement, onCancel }: { settlement: Settlement; onCancel: (s: Settlement) => void }) {
-  const { group, displayName, canCancelSettlement } = useGroupContext()
+  const { group, displayName, canCancelSettlement, userId } = useGroupContext()
+  const cancelLabel =
+    settlement.status === 'paid' ? 'Undo' : settlement.fromUser === userId ? 'Cancel request' : 'Not received'
   const cancelled = settlement.status === 'cancelled'
   const pending = settlement.status === 'pending'
   const Icon = cancelled ? XCircle : pending ? Clock : CheckCircle2
@@ -65,19 +60,19 @@ function HistoryRow({ settlement, onCancel }: { settlement: Settlement; onCancel
       />
       <div className="min-w-0 flex-1">
         <p className={cn('text-sm', cancelled && 'text-muted-foreground line-through')}>
-          <span className="font-medium">{displayName(settlement.fromUser)}</span> {pending ? 'owes' : 'paid'}{' '}
+          <span className="font-medium">{displayName(settlement.fromUser)}</span> {pending ? 'says they paid' : 'paid'}{' '}
           <span className="font-medium">{displayName(settlement.toUser)}</span>{' '}
           <span className="font-semibold tabular">{formatMoney(settlement.amount, group.currency)}</span>
         </p>
         <p className="text-xs text-muted-foreground">
-          {cancelled ? 'Cancelled' : pending ? 'Pending' : 'Paid'} ·{' '}
+          {cancelled ? 'Cancelled' : pending ? `Waiting for ${displayName(settlement.toUser)} to confirm` : 'Paid · confirmed by receiver'} ·{' '}
           {formatDate(settlement.paidAt ?? settlement.createdAt)}
           {settlement.note && ` · ${settlement.note}`}
         </p>
       </div>
       {canCancelSettlement(settlement) && (
-        <Button variant="ghost" size="sm" onClick={() => onCancel(settlement)} aria-label="Undo this payment">
-          <RotateCcw /> Undo
+        <Button variant="ghost" size="sm" onClick={() => onCancel(settlement)}>
+          <RotateCcw /> {cancelLabel}
         </Button>
       )}
     </li>
@@ -90,7 +85,10 @@ export function SettlementsPage() {
   const [filter, setFilter] = useState<Filter>('all')
   const [cancelling, setCancelling] = useState<Settlement | null>(null)
 
-  const recordedPending = settlements.filter((s) => s.status === 'pending')
+  // Requests that match a suggested payment are shown on that row; list any others separately.
+  const recordedPending = settlements.filter(
+    (s) => s.status === 'pending' && !transfers.some((t) => t.from === s.fromUser && t.to === s.toUser),
+  )
   const history = settlements.filter((s) =>
     filter === 'all' ? s.status !== 'pending' : filter === 'paid' ? s.status === 'paid' : false,
   )
@@ -161,16 +159,18 @@ export function SettlementsPage() {
       <ConfirmDialog
         open={Boolean(cancelling)}
         onOpenChange={(open) => !open && setCancelling(null)}
-        title="Undo this payment?"
+        title={cancelling?.status === 'paid' ? 'Undo this payment?' : 'Cancel this payment request?'}
         description={
           cancelling && (
             <p>
-              {formatMoney(cancelling.amount, group.currency)} will no longer count as paid and balances will be recalculated.
+              {cancelling.status === 'paid'
+                ? `${formatMoney(cancelling.amount, group.currency)} will no longer count as received and balances will be recalculated.`
+                : `The ${formatMoney(cancelling.amount, group.currency)} request will be closed without counting as paid.`}{' '}
               The record stays in the history as cancelled.
             </p>
           )
         }
-        confirmLabel="Undo payment"
+        confirmLabel={cancelling?.status === 'paid' ? 'Undo payment' : 'Cancel request'}
         destructive
         pending={updateStatus.isPending}
         onConfirm={() =>

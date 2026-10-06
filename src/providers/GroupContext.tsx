@@ -16,9 +16,15 @@ export interface GroupActions {
   /** Open the add form (no argument) or the edit form for an expense. */
   openExpenseForm: (expense?: Expense) => void
   openExpenseDetails: (expense: Expense) => void
-  /** Open the "mark as paid" confirmation for a suggested transfer. */
-  openSettle: (transfer: Transfer) => void
+  /**
+   * Open the payment dialog for a suggested transfer.
+   * 'receive' — the receiver confirms they got the money (marks it paid).
+   * 'request' — the payer says "I've paid"; it counts once the receiver confirms.
+   */
+  openSettle: (transfer: Transfer, mode: SettleMode) => void
 }
+
+export type SettleMode = 'receive' | 'request'
 
 export interface GroupContextValue extends GroupData, GroupActions {
   userId: UserId
@@ -38,7 +44,12 @@ export interface GroupContextValue extends GroupData, GroupActions {
   mine: PersonalSummary
   canEditExpense: (expense: Expense) => boolean
   isExpenseLocked: (expense: Expense) => boolean
-  canSettle: (from: UserId, to: UserId) => boolean
+  /** Only the receiver can mark money as paid/received. */
+  canMarkReceived: (from: UserId, to: UserId) => boolean
+  /** Only the payer can send an "I've paid" request. */
+  canRequestPaid: (from: UserId, to: UserId) => boolean
+  /** The open "I've paid" request between two people, if any. */
+  pendingRequest: (from: UserId, to: UserId) => Settlement | undefined
   canCancelSettlement: (settlement: Settlement) => boolean
   realtime: RealtimeStatus
 }
@@ -79,14 +90,19 @@ export function deriveGroupState(data: GroupData, userId: UserId) {
     balanceOf: (id: UserId) => balanceMap.get(id) ?? EMPTY_BALANCE(id),
     nameOf: (id: UserId | null | undefined) => (id ? (memberById.get(id)?.name ?? 'Former member') : 'Someone'),
     isExpenseLocked: (e: Expense) => !isActive(e.paidBy) || e.splits.some((s) => !isActive(s.userId)),
-    canEditExpense: (e: Expense) => (me?.isActive ?? false) && (e.createdBy === userId || isAdmin),
-    canSettle: (from: UserId, to: UserId) =>
-      (me?.isActive ?? false) && isActive(from) && isActive(to) && (from === userId || to === userId || isAdmin),
+    // Only the person who added an expense can edit or delete it.
+    canEditExpense: (e: Expense) => (me?.isActive ?? false) && e.createdBy === userId,
+    canMarkReceived: (from: UserId, to: UserId) => (me?.isActive ?? false) && to === userId && isActive(from),
+    canRequestPaid: (from: UserId, to: UserId) => (me?.isActive ?? false) && from === userId && isActive(to),
+    pendingRequest: (from: UserId, to: UserId) =>
+      data.settlements.find((s) => s.status === 'pending' && s.fromUser === from && s.toUser === to),
     canCancelSettlement: (s: Settlement) => {
-      if (s.status === 'cancelled' || !(me?.isActive ?? false)) return false
-      // The receiver can always dispute a payment recorded to them.
-      if (s.toUser === userId) return true
-      return isActive(s.fromUser) && isActive(s.toUser) && (s.fromUser === userId || isAdmin)
+      if (!(me?.isActive ?? false)) return false
+      // A paid payment can only be undone by the person who received it.
+      if (s.status === 'paid') return s.toUser === userId
+      // A pending request can be withdrawn by the payer or rejected by the receiver.
+      if (s.status === 'pending') return s.toUser === userId || (s.fromUser === userId && isActive(s.toUser))
+      return false
     },
   }
 }

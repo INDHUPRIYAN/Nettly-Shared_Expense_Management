@@ -338,7 +338,7 @@ describe('expenses and splits', () => {
     expect(forged.error?.code).toBe('42501')
   })
 
-  it('only the creator or an admin can edit/delete an expense', async () => {
+  it('only the person who added an expense can edit or delete it (not even the owner)', async () => {
     const { data: id } = await addExpense(b, groupId, {
       title: 'B expense',
       amount: 600,
@@ -358,10 +358,16 @@ describe('expenses and splits', () => {
     const cDelete = await c.client.from('expenses').delete().eq('id', id!).select()
     expect(cDelete.data).toEqual([])
 
+    // The group owner can't edit or delete someone else's expense either.
+    expect((await update(a, 'Owner edit')).error?.message).toBe('NOT_AUTHORIZED')
+    const ownerDelete = await a.client.from('expenses').delete().eq('id', id!).select()
+    expect(ownerDelete.data).toEqual([])
+    const ownerSplits = await a.client.from('expense_splits').delete().eq('expense_id', id!).select()
+    expect(ownerSplits.data).toEqual([])
+
     expect((await update(b, 'Creator edit')).error).toBeNull()
-    expect((await update(a, 'Owner edit')).error).toBeNull()
     const { data } = await b.client.from('expenses').select('title, amount, expense_splits(amount)').eq('id', id!).single()
-    expect(data).toMatchObject({ title: 'Owner edit', amount: 900 })
+    expect(data).toMatchObject({ title: 'Creator edit', amount: 900 })
     expect(data?.expense_splits.map((s) => s.amount).sort()).toEqual([300, 300, 300])
 
     const del = await b.client.from('expenses').delete().eq('id', id!).select()
@@ -388,49 +394,92 @@ describe('settlements', () => {
     await addExpense(a, groupId, { title: 'Hotel', amount: 3000, paidBy: a.id, splits: equalSplits(3000, [a.id, b.id, c.id]) })
   })
 
-  it('a party can record a payment; paid_at is set by the server', async () => {
-    const { data, error } = await b.client
+  it('only the receiver can mark money as paid; paid_at is set by the server', async () => {
+    // The payer cannot mark their own payment as paid.
+    const selfMarked = await b.client
+      .from('settlements')
+      .insert({ group_id: groupId, from_user: b.id, to_user: a.id, amount: 1000, status: 'paid' })
+    expect(selfMarked.error).not.toBeNull()
+
+    // The receiver records it.
+    const { data, error } = await a.client
       .from('settlements')
       .insert({ group_id: groupId, from_user: b.id, to_user: a.id, amount: 1000, status: 'paid' })
       .select()
       .single()
     expect(error).toBeNull()
-    expect(data?.created_by).toBe(b.id)
+    expect(data?.created_by).toBe(a.id)
     expect(data?.paid_at).not.toBeNull()
     const { data: balances } = await a.client.rpc('group_balances', { p_group_id: groupId })
     expect(balances?.find((x) => x.user_id === b.id)?.net).toBe(0)
   })
 
-  it('a member who is not a party (and not admin) cannot record or change it', async () => {
-    const { error } = await c.client
+  it('nobody else (not even the owner) can record or change a payment between others', async () => {
+    const third = await c.client
       .from('settlements')
       .insert({ group_id: groupId, from_user: b.id, to_user: a.id, amount: 1, status: 'paid' })
-    expect(error).not.toBeNull()
+    expect(third.error).not.toBeNull()
+    const forged = await a.client
+      .from('settlements')
+      .insert({ group_id: groupId, from_user: c.id, to_user: b.id, amount: 1, status: 'paid' })
+    expect(forged.error).not.toBeNull()
+    const forgedRequest = await a.client
+      .from('settlements')
+      .insert({ group_id: groupId, from_user: c.id, to_user: b.id, amount: 1, status: 'pending' })
+    expect(forgedRequest.error).not.toBeNull()
   })
 
-  it('enforces the status state machine and immutability', async () => {
+  it(`"I've paid" requests count only after the receiver confirms`, async () => {
+    // The payer sends a request: pending, no effect on balances.
     const { data: s } = await c.client
       .from('settlements')
       .insert({ group_id: groupId, from_user: c.id, to_user: a.id, amount: 500, status: 'pending' })
       .select()
       .single()
     expect(s?.paid_at).toBeNull()
+    const before = await a.client.rpc('group_balances', { p_group_id: groupId })
+    expect(before.data?.find((x) => x.user_id === c.id)?.net).toBe(-1000)
 
-    const paid = await c.client.from('settlements').update({ status: 'paid' }).eq('id', s!.id).select().single()
+    // Only one open request at a time per pair.
+    const duplicate = await c.client
+      .from('settlements')
+      .insert({ group_id: groupId, from_user: c.id, to_user: a.id, amount: 500, status: 'pending' })
+    expect(duplicate.error?.message).toBe('SETTLEMENT_REQUEST_EXISTS')
+
+    // The payer cannot confirm their own request.
+    const selfConfirm = await c.client.from('settlements').update({ status: 'paid' }).eq('id', s!.id)
+    expect(selfConfirm.error?.message).toBe('ONLY_RECEIVER_CAN_MARK_PAID')
+
+    // The receiver confirms.
+    const paid = await a.client.from('settlements').update({ status: 'paid' }).eq('id', s!.id).select().single()
     expect(paid.data?.status).toBe('paid')
     expect(paid.data?.paid_at).not.toBeNull()
+    const after = await a.client.rpc('group_balances', { p_group_id: groupId })
+    expect(after.data?.find((x) => x.user_id === c.id)?.net).toBe(-500)
 
+    // Amounts are immutable; the payer cannot undo a confirmed payment.
     const amount = await c.client.from('settlements').update({ amount: 1 } as never).eq('id', s!.id)
     expect(amount.error?.code).toBe('42501')
+    const payerUndo = await c.client.from('settlements').update({ status: 'cancelled' }).eq('id', s!.id)
+    expect(payerUndo.error?.message).toBe('ONLY_RECEIVER_CAN_MARK_PAID')
 
+    // Only the receiver can undo it.
     const cancelled = await a.client.from('settlements').update({ status: 'cancelled' }).eq('id', s!.id).select().single()
     expect(cancelled.data?.status).toBe('cancelled')
-
     const revive = await a.client.from('settlements').update({ status: 'paid' }).eq('id', s!.id)
     expect(revive.error?.message).toBe('SETTLEMENT_INVALID_TRANSITION')
-
     const del = await a.client.from('settlements').delete().eq('id', s!.id)
     expect(del.error).not.toBeNull()
+  })
+
+  it('a payer can withdraw their own pending request', async () => {
+    const { data: s } = await c.client
+      .from('settlements')
+      .insert({ group_id: groupId, from_user: c.id, to_user: a.id, amount: 200, status: 'pending' })
+      .select('id')
+      .single()
+    const withdrawn = await c.client.from('settlements').update({ status: 'cancelled' }).eq('id', s!.id).select('status').single()
+    expect(withdrawn.data?.status).toBe('cancelled')
   })
 
   it('rejects self-payments and non-positive amounts', async () => {
@@ -468,7 +517,7 @@ describe('membership removal keeps history valid', () => {
     const blocked = await owner.client.rpc('remove_member', { p_group_id: group.id, p_user_id: spender.id })
     expect(blocked.error?.message).toBe('MEMBER_HAS_BALANCE')
 
-    await spender.client
+    await owner.client
       .from('settlements')
       .insert({ group_id: group.id, from_user: spender.id, to_user: owner.id, amount: 500, status: 'paid' })
 
@@ -520,7 +569,7 @@ describe('membership removal keeps history valid', () => {
       paidBy: friend.id,
       splits: equalSplits(400, [owner.id, friend.id]),
     })
-    await owner.client
+    await friend.client
       .from('settlements')
       .insert({ group_id: group.id, from_user: owner.id, to_user: friend.id, amount: 200, status: 'paid' })
     expect((await owner.client.rpc('remove_member', { p_group_id: group.id, p_user_id: friend.id })).data).toBe(
@@ -587,8 +636,13 @@ describe('hardening', () => {
     await join(debtor, group.invite_token)
     await addExpense(owner, group.id, { title: 'Hotel', amount: 2000, paidBy: owner.id, splits: equalSplits(2000, [owner.id, debtor.id]) })
 
-    // The debtor records a payment that never happened, then leaves with a "zero" balance.
-    const { data: fake } = await debtor.client
+    // A debtor can no longer mark their own payment as paid at all...
+    const fakeAttempt = await debtor.client
+      .from('settlements')
+      .insert({ group_id: group.id, from_user: debtor.id, to_user: owner.id, amount: 1000, status: 'paid' })
+    expect(fakeAttempt.error).not.toBeNull()
+    // ...and a receiver-confirmed payment stays disputable by the receiver after the payer leaves.
+    const { data: fake } = await owner.client
       .from('settlements')
       .insert({ group_id: group.id, from_user: debtor.id, to_user: owner.id, amount: 1000, status: 'paid' })
       .select('id')
@@ -615,7 +669,7 @@ describe('hardening', () => {
       paidBy: owner.id,
       splits: equalSplits(300, [owner.id, gone.id, stay.id]),
     })
-    await gone.client.from('settlements').insert({ group_id: group.id, from_user: gone.id, to_user: owner.id, amount: 100, status: 'paid' })
+    await owner.client.from('settlements').insert({ group_id: group.id, from_user: gone.id, to_user: owner.id, amount: 100, status: 'paid' })
     await gone.client.rpc('remove_member', { p_group_id: group.id, p_user_id: gone.id })
 
     const del = await owner.client.from('expense_splits').delete().eq('expense_id', id!).eq('user_id', stay.id)
@@ -670,10 +724,10 @@ describe('acceptance scenario through the database', () => {
     expect(engine.map((b) => b.net)).toEqual([R(2400), R(-100), R(-700), R(-1600)])
     expect(engine.reduce((s, b) => s + b.share, 0)).toBe(R(6100))
 
-    // Each debtor marks their suggested payment as paid.
+    // Each receiver confirms the suggested payment they received.
     for (const t of simplifyDebts(engine)) {
-      const payer = users.find((u) => u.id === t.from)!
-      const { error } = await payer.client
+      const receiver = users.find((u) => u.id === t.to)!
+      const { error } = await receiver.client
         .from('settlements')
         .insert({ group_id: group.id, from_user: t.from, to_user: t.to, amount: t.amount, status: 'paid' })
       expect(error).toBeNull()

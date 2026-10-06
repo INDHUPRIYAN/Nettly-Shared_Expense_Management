@@ -23,7 +23,7 @@ test('mobile: landing, signup, group and bottom navigation fit the screen', asyn
 
   const bottomNav = page.getByRole('navigation', { name: 'Group sections' }).last()
   await expect(bottomNav).toBeVisible()
-  await expect(bottomNav.getByRole('link')).toHaveText(['Home', 'Expenses', 'Settle', 'Members'])
+  await expect(bottomNav.getByRole('link')).toHaveText(['Home', 'Expenses', 'Settle', 'Members', 'History'])
   await expectNoHorizontalScroll(page)
 
   await page.getByTestId('header-add-expense').click()
