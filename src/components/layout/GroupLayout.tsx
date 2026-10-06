@@ -1,5 +1,5 @@
 import { ArrowLeft, Plus, Settings, WifiOff } from 'lucide-react'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { Link, Outlet, useParams } from 'react-router'
 import { ErrorState, GroupPageSkeleton } from '@/components/common/States'
 import { ExpenseDetailsDialog } from '@/components/expenses/ExpenseDetailsDialog'
@@ -80,37 +80,27 @@ export function GroupLayout() {
     [openExpenseForm, openExpenseDetails, openSettle],
   )
 
+  // The app shell stays mounted across loading/error/loaded states so the
+  // header (and an open account menu) is never torn down mid-interaction.
+  let content: ReactNode = null
   if (query.isPending) {
-    return (
-      <AppShell>
-        <GroupPageSkeleton />
-      </AppShell>
+    content = <GroupPageSkeleton />
+  } else if (query.isError) {
+    content = <ErrorState title="We couldn't load this group" error={query.error} onRetry={() => void query.refetch()} />
+  } else if (!query.data) {
+    content = (
+      <div className="mx-auto max-w-md py-10 text-center">
+        <h1 className="text-xl font-semibold">Group not found</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          This group doesn&apos;t exist, was deleted, or you&apos;re no longer a member.
+        </p>
+        <Button asChild className="mt-6">
+          <Link to="/dashboard">Back to your groups</Link>
+        </Button>
+      </div>
     )
   }
-
-  if (query.isError) {
-    return (
-      <AppShell>
-        <ErrorState title="We couldn't load this group" error={query.error} onRetry={() => void query.refetch()} />
-      </AppShell>
-    )
-  }
-
-  if (!query.data) {
-    return (
-      <AppShell>
-        <div className="mx-auto max-w-md py-10 text-center">
-          <h1 className="text-xl font-semibold">Group not found</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            This group doesn&apos;t exist, was deleted, or you&apos;re no longer a member.
-          </p>
-          <Button asChild className="mt-6">
-            <Link to="/dashboard">Back to your groups</Link>
-          </Button>
-        </div>
-      </AppShell>
-    )
-  }
+  if (content || !query.data) return <AppShell>{content}</AppShell>
 
   const data = query.data
   // Always show the freshest version of an open expense (realtime may update it).
@@ -118,11 +108,10 @@ export function GroupLayout() {
   const details = detailsId ? (data.expenses.find((e) => e.id === detailsId) ?? null) : null
 
   return (
-    <GroupProvider data={data} userId={userId} actions={actions} realtime={realtime}>
-      <AppShell bottomNav={<GroupBottomNav groupId={data.group.id} />}>
+    <AppShell bottomNav={<GroupBottomNav groupId={data.group.id} />}>
+      <GroupProvider data={data} userId={userId} actions={actions} realtime={realtime}>
         <GroupHeader />
         <Outlet />
-      </AppShell>
 
       {form.open && (form.expenseId === undefined || editing) && (
         <ExpenseFormDialog
@@ -133,7 +122,10 @@ export function GroupLayout() {
         />
       )}
       <ExpenseDetailsDialog expense={details} onOpenChange={(open) => !open && setDetailsId(null)} />
-      {settle && <MarkPaidDialog key={settle.key} transfer={settle.transfer} mode={settle.mode} onOpenChange={(open) => !open && setSettle(null)} />}
-    </GroupProvider>
+        {settle && (
+          <MarkPaidDialog key={settle.key} transfer={settle.transfer} mode={settle.mode} onOpenChange={(open) => !open && setSettle(null)} />
+        )}
+      </GroupProvider>
+    </AppShell>
   )
 }
