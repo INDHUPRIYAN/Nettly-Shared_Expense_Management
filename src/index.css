@@ -1,70 +1,42 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
-@custom-variant dark (@media (prefers-color-scheme: dark));
+/* Light theme only. `dark:` utilities are inert unless a `.dark` class is added. */
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --radius: 0.875rem;
+  color-scheme: light;
+  --radius: 1rem;
 
-  --background: oklch(0.985 0.002 180);
-  --foreground: oklch(0.2 0.02 200);
+  --background: oklch(0.985 0.007 15);
+  --foreground: oklch(0.24 0.03 15);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.02 200);
+  --card-foreground: oklch(0.24 0.03 15);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0.02 200);
+  --popover-foreground: oklch(0.24 0.03 15);
 
-  /* Brand: deep teal */
-  --primary: oklch(0.51 0.09 186);
+  /* Brand: red / rose gradient */
+  --primary: oklch(0.586 0.222 17.6);
   --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.955 0.012 186);
-  --secondary-foreground: oklch(0.3 0.05 190);
-  --muted: oklch(0.96 0.005 200);
-  --muted-foreground: oklch(0.47 0.02 210);
-  --accent: oklch(0.955 0.015 186);
-  --accent-foreground: oklch(0.3 0.05 190);
-  --border: oklch(0.91 0.008 200);
-  --input: oklch(0.88 0.01 200);
-  --ring: oklch(0.51 0.09 186);
+  --secondary: oklch(0.955 0.03 12);
+  --secondary-foreground: oklch(0.45 0.17 17);
+  --muted: oklch(0.965 0.012 15);
+  --muted-foreground: oklch(0.5 0.03 15);
+  --accent: oklch(0.96 0.025 12);
+  --accent-foreground: oklch(0.42 0.16 17);
+  --border: oklch(0.91 0.02 12);
+  --input: oklch(0.88 0.03 12);
+  --ring: oklch(0.645 0.215 16.4);
 
-  /* Semantic money colours (always paired with text/icons, never colour alone) */
-  --positive: oklch(0.5 0.13 155);
-  --positive-soft: oklch(0.96 0.04 155);
-  --negative: oklch(0.53 0.19 25);
-  --negative-soft: oklch(0.965 0.03 25);
-  --pending: oklch(0.55 0.13 70);
-  --pending-soft: oklch(0.97 0.05 85);
-  --destructive: oklch(0.55 0.21 27);
+  /* Semantic money colours (always paired with a sign, icon or label) */
+  --positive: oklch(0.52 0.14 155);
+  --positive-soft: oklch(0.955 0.045 155);
+  --negative: oklch(0.55 0.22 25);
+  --negative-soft: oklch(0.96 0.03 20);
+  --pending: oklch(0.58 0.14 60);
+  --pending-soft: oklch(0.965 0.05 80);
+  --destructive: oklch(0.55 0.22 25);
   --destructive-foreground: oklch(0.99 0 0);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: oklch(0.17 0.01 200);
-    --foreground: oklch(0.95 0.005 200);
-    --card: oklch(0.21 0.012 200);
-    --card-foreground: oklch(0.95 0.005 200);
-    --popover: oklch(0.23 0.012 200);
-    --popover-foreground: oklch(0.95 0.005 200);
-    --primary: oklch(0.72 0.11 182);
-    --primary-foreground: oklch(0.17 0.02 200);
-    --secondary: oklch(0.27 0.02 195);
-    --secondary-foreground: oklch(0.93 0.01 190);
-    --muted: oklch(0.25 0.012 200);
-    --muted-foreground: oklch(0.72 0.015 200);
-    --accent: oklch(0.27 0.02 195);
-    --accent-foreground: oklch(0.93 0.01 190);
-    --border: oklch(0.3 0.012 200);
-    --input: oklch(0.35 0.012 200);
-    --ring: oklch(0.72 0.11 182);
-    --positive: oklch(0.76 0.14 155);
-    --positive-soft: oklch(0.27 0.05 155);
-    --negative: oklch(0.74 0.15 25);
-    --negative-soft: oklch(0.28 0.06 25);
-    --pending: oklch(0.8 0.13 80);
-    --pending-soft: oklch(0.29 0.05 80);
-    --destructive: oklch(0.66 0.19 25);
-    --destructive-foreground: oklch(0.99 0 0);
-  }
 }
 
 @theme inline {
@@ -94,11 +66,44 @@
   --color-pending-soft: var(--pending-soft);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
-  --radius-sm: calc(var(--radius) - 6px);
-  --radius-md: calc(var(--radius) - 4px);
-  --radius-lg: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 8px);
+  --radius-md: calc(var(--radius) - 6px);
+  --radius-lg: calc(var(--radius) - 4px);
   --radius-xl: var(--radius);
   --radius-2xl: calc(var(--radius) + 4px);
+  --radius-3xl: calc(var(--radius) + 10px);
+}
+
+/* Frosted glass surface used by cards, header, navigation and dialogs. */
+@utility glass {
+  background-color: rgb(255 255 255 / 0.62);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  backdrop-filter: blur(18px) saturate(170%);
+  border: 1px solid rgb(255 255 255 / 0.75);
+  box-shadow:
+    0 10px 30px -12px rgb(225 29 72 / 0.18),
+    inset 0 1px 0 rgb(255 255 255 / 0.7);
+}
+
+/* Stronger glass for dialogs so text stays crisp over the page. */
+@utility glass-strong {
+  background-color: rgb(255 255 255 / 0.88);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgb(255 255 255 / 0.9);
+  box-shadow: 0 24px 60px -20px rgb(190 18 60 / 0.35);
+}
+
+/* Brand gradient (buttons, hero, logo). */
+@utility bg-brand {
+  background-image: linear-gradient(135deg, #fb7185 0%, #e11d48 50%, #dc2626 100%);
+}
+
+@utility text-brand {
+  background-image: linear-gradient(135deg, #f43f5e 0%, #dc2626 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 @layer base {
@@ -109,7 +114,14 @@
     -webkit-tap-highlight-color: transparent;
   }
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply text-foreground antialiased;
+    min-height: 100dvh;
+    background-color: #fff6f6;
+    background-image:
+      radial-gradient(900px 520px at -8% -12%, rgb(254 205 211 / 0.9) 0%, transparent 60%),
+      radial-gradient(760px 480px at 108% 4%, rgb(254 202 202 / 0.75) 0%, transparent 58%),
+      radial-gradient(820px 560px at 50% 112%, rgb(255 228 230 / 0.9) 0%, transparent 62%);
+    background-attachment: fixed;
     font-feature-settings: 'cv11', 'ss01';
   }
   .tabular {

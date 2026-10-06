@@ -87,13 +87,13 @@ isOneToOne: false
                   ]
                 },"group_members": {
                   Row: {
-                    "group_id": string,"id": string,"joined_at": string,"removed_at": string | null,"role": string,"user_id": string
+                    "display_name": string | null,"group_id": string,"id": string,"joined_at": string,"removed_at": string | null,"role": string,"user_id": string
                   }
                   Insert: {
-                    "group_id": string,"id"?: string,"joined_at"?: string,"removed_at"?: string | null,"role"?: string,"user_id": string
+                    "display_name"?: string | null,"group_id": string,"id"?: string,"joined_at"?: string,"removed_at"?: string | null,"role"?: string,"user_id": string
                   }
                   Update: {
-                    "group_id"?: string,"id"?: string,"joined_at"?: string,"removed_at"?: string | null,"role"?: string,"user_id"?: string
+                    "display_name"?: string | null,"group_id"?: string,"id"?: string,"joined_at"?: string,"removed_at"?: string | null,"role"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -128,6 +128,19 @@ isOneToOne: false
       referencedRelation: "profiles"
       referencedColumns: ["id"]
     }
+                  ]
+                },"invite_code_attempts": {
+                  Row: {
+                    "attempted_at": string,"id": number,"user_id": string
+                  }
+                  Insert: {
+                    "attempted_at"?: string,"id"?: never,"user_id": string
+                  }
+                  Update: {
+                    "attempted_at"?: string,"id"?: never,"user_id"?: string
+                  }
+                  Relationships: [
+                    
                   ]
                 },"profiles": {
                   Row: {
@@ -260,6 +273,9 @@ isOneToOne: false
               "group_id": string,"status": string
             }[]
                            },
+"lock_active_member":
+{ Args: { "p_group_id": string,"p_user_id": string }; Returns: boolean
+                           },
 "member_net_balance":
 { Args: { "p_group_id": string,"p_user_id": string }; Returns: number
                            },
@@ -284,6 +300,12 @@ isOneToOne: false
       } },
 "remove_member":
 { Args: { "p_group_id": string,"p_user_id": string }; Returns: string
+                           },
+"rotate_invite":
+{ Args: { "p_group_id": string }; Returns: undefined
+                           },
+"set_member_display_name":
+{ Args: { "p_group_id": string,"p_name": string,"p_user_id": string }; Returns: string
                            },
 "set_member_role":
 { Args: { "p_group_id": string,"p_role": string,"p_user_id": string }; Returns: undefined

@@ -1,0 +1,3 @@
+-- Intentionally empty.
+-- Demo data is created by `npm run db:seed-demo` (local only) so that it goes
+-- through the same RLS rules and RPCs as the app. Production is never seeded.

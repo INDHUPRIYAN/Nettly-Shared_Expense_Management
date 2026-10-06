@@ -16,8 +16,8 @@ export default defineConfig({
         name: 'Nettly — Split anything. Settle everything.',
         short_name: 'Nettly',
         description: 'Track shared expenses, split fairly and settle up with friends.',
-        theme_color: '#0f766e',
-        background_color: '#ffffff',
+        theme_color: '#e11d48',
+        background_color: '#fff6f6',
         display: 'standalone',
         start_url: '/dashboard',
         scope: '/',
@@ -43,6 +43,11 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+  },
+  build: {
+    // The core chunk (React, router, supabase-js, React Query) is ~155 kB gzipped;
+    // every page is lazy-loaded on top of it.
+    chunkSizeWarningLimit: 600,
   },
   test: {
     projects: [

@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { calculateBalances, simplifyDebts } from '../../src/lib/settlement'
 import {
   addExpense,
+  admin,
   anonClient,
   createGroup,
   createTestUser,
@@ -15,18 +16,23 @@ const R = (rupees: number) => rupees * 100
 describe('profiles', () => {
   it('creates a profile automatically on signup, readable by its owner', async () => {
     const indhu = await createTestUser('Indhu')
-    const { data, error } = await indhu.client.from('profiles').select('*').eq('id', indhu.id).single()
+    const { data, error } = await indhu.client.from('profiles').select('id, name').eq('id', indhu.id).single()
     expect(error).toBeNull()
-    expect(data).toMatchObject({ id: indhu.id, name: 'Indhu', email: indhu.email })
+    expect(data).toMatchObject({ id: indhu.id, name: 'Indhu' })
+    // The email is stored but is private: clients cannot select it, even their own.
+    const { data: stored } = await admin.from('profiles').select('email').eq('id', indhu.id).single()
+    expect(stored?.email).toBe(indhu.email)
+    const hidden = await indhu.client.from('profiles').select('email').eq('id', indhu.id)
+    expect(hidden.error?.code).toBe('42501')
   })
 
   it('users can update their own name but not their email or other profiles', async () => {
     const a = await createTestUser('Alpha')
     const b = await createTestUser('Bravo')
-    const own = await a.client.from('profiles').update({ name: 'Alpha Prime' }).eq('id', a.id).select().single()
+    const own = await a.client.from('profiles').update({ name: 'Alpha Prime' }).eq('id', a.id).select('name').single()
     expect(own.data?.name).toBe('Alpha Prime')
 
-    const other = await a.client.from('profiles').update({ name: 'Hacked' }).eq('id', b.id).select()
+    const other = await a.client.from('profiles').update({ name: 'Hacked' }).eq('id', b.id).select('id')
     expect(other.data).toEqual([])
 
     // Column-level privileges: email is not writable from the client.
@@ -175,7 +181,7 @@ describe('group isolation (RLS)', () => {
   it('outsiders see nothing', async () => {
     for (const table of ['groups', 'group_members', 'expenses', 'expense_splits', 'settlements'] as const) {
       const column = table === 'groups' ? 'id' : 'group_id'
-      const { data, error } = await outsider.client.from(table).select('*').eq(column, groupId)
+      const { data, error } = await outsider.client.from(table).select('*').eq(column as never, groupId)
       expect(error).toBeNull()
       expect(data).toEqual([])
     }
@@ -194,7 +200,7 @@ describe('group isolation (RLS)', () => {
 
     const direct = await outsider.client
       .from('expenses')
-      .insert({ group_id: groupId, title: 'Direct', amount: 100, paid_by: owner.id })
+      .insert({ group_id: groupId, title: 'Direct', amount: 100, paid_by: owner.id } as never)
     expect(direct.error).not.toBeNull()
 
     const settlement = await outsider.client
@@ -307,7 +313,7 @@ describe('expenses and splits', () => {
 
   it('the split total is enforced even for direct table writes (deferred constraint)', async () => {
     // An expense with no splits cannot be committed.
-    const noSplits = await a.client.from('expenses').insert({ group_id: groupId, title: 'Raw', amount: 100, paid_by: a.id })
+    const noSplits = await a.client.from('expenses').insert({ group_id: groupId, title: 'Raw', amount: 100, paid_by: a.id } as never)
     expect(noSplits.error?.message).toBe('SPLIT_EMPTY')
 
     // Adding an extra split to an existing balanced expense is rejected.
@@ -317,7 +323,7 @@ describe('expenses and splits', () => {
       paidBy: a.id,
       splits: equalSplits(300, [a.id, b.id]),
     })
-    const extra = await a.client.from('expense_splits').insert({ expense_id: id!, user_id: c.id, amount: 100 })
+    const extra = await a.client.from('expense_splits').insert({ expense_id: id!, user_id: c.id, amount: 100 } as never)
     expect(extra.error?.message).toBe('SPLIT_TOTAL_MISMATCH')
 
     // Removing a split is rejected too.
@@ -495,8 +501,12 @@ describe('membership removal keeps history valid', () => {
     const removed = await owner.client.rpc('remove_member', { p_group_id: group.id, p_user_id: lurker.id })
     expect(removed.data).toBe('removed')
 
-    // Rejoining via the invite reactivates the former member.
-    expect(await join(spender, group.invite_token)).toMatchObject({ status: 'rejoined' })
+    // Removal rotated the invite: the old link no longer works for anyone.
+    const stale = await spender.client.rpc('join_group', { p_token: group.invite_token })
+    expect(stale.error?.message).toBe('INVITE_INVALID')
+    // With a fresh invite, the former member is reactivated (history intact).
+    const { data: fresh } = await owner.client.from('groups').select('invite_token').eq('id', group.id).single()
+    expect(await join(spender, fresh!.invite_token)).toMatchObject({ status: 'rejoined' })
   })
 
   it('deleting a group cascades everything, including history with former members', async () => {
@@ -531,6 +541,98 @@ describe('membership removal keeps history valid', () => {
     await join(friend, group.invite_token)
     const { data } = await friend.client.rpc('remove_member', { p_group_id: group.id, p_user_id: friend.id })
     expect(data).toBe('removed')
+  })
+})
+
+describe('member display names', () => {
+  it('admins rename anyone, members rename only themselves, empty resets', async () => {
+    const owner = await createTestUser('Owner')
+    const nandha = await createTestUser('Nandha')
+    const karthik = await createTestUser('Karthik')
+    const outsider = await createTestUser('Outsider')
+    const group = await createGroup(owner)
+    await join(nandha, group.invite_token)
+    await join(karthik, group.invite_token)
+    const rename = (by: TestUser, who: TestUser, name: string) =>
+      by.client.rpc('set_member_display_name', { p_group_id: group.id, p_user_id: who.id, p_name: name })
+    const nameOf = async (who: TestUser) =>
+      (await owner.client.from('group_members').select('display_name').eq('group_id', group.id).eq('user_id', who.id).single()).data
+        ?.display_name
+
+    expect((await rename(owner, nandha, '  Nandha K ')).error).toBeNull()
+    expect(await nameOf(nandha)).toBe('Nandha K')
+    expect((await rename(karthik, karthik, 'KK')).error).toBeNull()
+    expect(await nameOf(karthik)).toBe('KK')
+
+    expect((await rename(karthik, nandha, 'Hacked')).error?.message).toBe('NOT_AUTHORIZED')
+    expect((await rename(outsider, nandha, 'Hacked')).error?.message).toBe('NOT_A_MEMBER')
+    expect((await rename(owner, nandha, 'x'.repeat(81))).error?.message).toBe('INVALID_INPUT')
+    // Clients can't write the column directly.
+    const direct = await karthik.client.from('group_members').update({ display_name: 'Direct' } as never).eq('user_id', karthik.id)
+    expect(direct.error).not.toBeNull()
+
+    expect((await rename(owner, nandha, '')).error).toBeNull()
+    expect(await nameOf(nandha)).toBeNull()
+    // The profile name is untouched.
+    const { data: profile } = await owner.client.from('profiles').select('name').eq('id', karthik.id).single()
+    expect(profile?.name).toBe('Karthik')
+  })
+})
+
+describe('hardening', () => {
+  it('a receiver can dispute a fake payment even after the payer left', async () => {
+    const owner = await createTestUser('Owner')
+    const debtor = await createTestUser('Debtor')
+    const group = await createGroup(owner)
+    await join(debtor, group.invite_token)
+    await addExpense(owner, group.id, { title: 'Hotel', amount: 2000, paidBy: owner.id, splits: equalSplits(2000, [owner.id, debtor.id]) })
+
+    // The debtor records a payment that never happened, then leaves with a "zero" balance.
+    const { data: fake } = await debtor.client
+      .from('settlements')
+      .insert({ group_id: group.id, from_user: debtor.id, to_user: owner.id, amount: 1000, status: 'paid' })
+      .select('id')
+      .single()
+    expect((await debtor.client.rpc('remove_member', { p_group_id: group.id, p_user_id: debtor.id })).data).toBe('deactivated')
+
+    // The receiver disputes it: the debt is back on the books.
+    const disputed = await owner.client.from('settlements').update({ status: 'cancelled' }).eq('id', fake!.id).select('status').single()
+    expect(disputed.data?.status).toBe('cancelled')
+    const { data: balances } = await owner.client.rpc('group_balances', { p_group_id: group.id })
+    expect(balances?.find((b) => b.user_id === debtor.id)?.net).toBe(-1000)
+  })
+
+  it('expenses involving a former member are locked at the split level too', async () => {
+    const owner = await createTestUser('Owner')
+    const gone = await createTestUser('Gone')
+    const stay = await createTestUser('Stay')
+    const group = await createGroup(owner)
+    await join(gone, group.invite_token)
+    await join(stay, group.invite_token)
+    const { data: id } = await addExpense(owner, group.id, {
+      title: 'Shared',
+      amount: 300,
+      paidBy: owner.id,
+      splits: equalSplits(300, [owner.id, gone.id, stay.id]),
+    })
+    await gone.client.from('settlements').insert({ group_id: group.id, from_user: gone.id, to_user: owner.id, amount: 100, status: 'paid' })
+    await gone.client.rpc('remove_member', { p_group_id: group.id, p_user_id: gone.id })
+
+    const del = await owner.client.from('expense_splits').delete().eq('expense_id', id!).eq('user_id', stay.id)
+    expect(del.error?.message).toBe('EXPENSE_LOCKED')
+    const ins = await owner.client.from('expense_splits').insert({ expense_id: id!, user_id: owner.id, amount: 0 } as never)
+    expect(ins.error?.message).toBe('EXPENSE_LOCKED')
+  })
+
+  it('rate-limits invite code guessing', async () => {
+    const guesser = await createTestUser('Guesser')
+    for (let i = 0; i < 10; i++) {
+      const { data, error } = await guesser.client.rpc('find_invite_by_code', { p_code: 'ZZZZZ' + String(i % 8 + 2) })
+      expect(error).toBeNull()
+      expect(data).toBeNull()
+    }
+    const { error } = await guesser.client.rpc('find_invite_by_code', { p_code: 'ZZZZZZ' })
+    expect(error?.message).toBe('RATE_LIMITED')
   })
 })
 
